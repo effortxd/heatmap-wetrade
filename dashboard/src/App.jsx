@@ -27,6 +27,7 @@ export default function App() {
   const [cta, setCta] = useState([]);
   const [heatmap, setHeatmap] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,6 +64,18 @@ export default function App() {
   const setPage = (p) =>
     setFilters((f) => ({ ...f, page: p || undefined }));
 
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      await api.exportCsv(filters);
+    } catch (e) {
+      console.error(e);
+      alert("Export failed: " + (e.message || "unknown error"));
+    } finally {
+      setExporting(false);
+    }
+  }, [filters]);
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -84,7 +97,7 @@ export default function App() {
         </div>
 
         <div className="sidebar-foot">
-          v1.1.0<br />
+          v1.2.0<br />
           {loading ? "Loading…" : "Idle"}
         </div>
       </aside>
@@ -97,7 +110,14 @@ export default function App() {
             </h1>
             <div className="page-sub">Sessions · clicks · scroll · CTAs</div>
           </div>
-          <Filters filters={filters} setFilters={setFilters} pages={pages} onRefresh={load} />
+          <Filters
+            filters={filters}
+            setFilters={setFilters}
+            pages={pages}
+            onRefresh={load}
+            onExport={handleExport}
+            exporting={exporting}
+          />
         </header>
 
         <section id="overview">

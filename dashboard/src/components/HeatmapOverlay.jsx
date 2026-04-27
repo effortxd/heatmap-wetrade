@@ -6,10 +6,10 @@ import React, { useEffect, useRef, useState } from "react";
  *  - When a page is selected: renders the actual page in an iframe with click
  *    dots overlaid on top, plus a plain-English "Top click zones" list.
  *
- * Click coordinates from the tracker are PAGE coordinates (pageX/pageY) with
- * the viewport_width that was active when the click happened. We scale x by
- * (containerWidth / viewport_width) so dots land in the right horizontal spot
- * regardless of which device the visitor used.
+ * Mobile mode (v1.2): when device toggle = "mobile", the iframe is forced to
+ * a 390px viewport so the page renders in its mobile layout, and clicks are
+ * filtered to mobile sessions only. This makes mobile dots line up with the
+ * actual mobile UI instead of being plotted on a desktop layout.
  */
 export default function HeatmapOverlay({ points, topClicks, currentPage, pages, onSelectPage }) {
   if (!currentPage) {
@@ -78,35 +78,40 @@ function PagePicker({ pages, onSelectPage }) {
 // ---------------------------------------------------------------------------
 //  Heatmap visual (iframe + canvas overlay) + plain-English zones list
 // ---------------------------------------------------------------------------
+const MOBILE_PREVIEW_WIDTH = 390;
+
 function HeatmapWithPreview({ points, topClicks, currentPage, onClear }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
-  const [device, setDevice] = useState("all");
+  const [device, setDevice] = useState("desktop");
   const [iframeFailed, setIframeFailed] = useState(false);
+  const [iframeKey, setIframeKey] = useState(0);
+
+  const isMobile = device === "mobile";
 
   const filtered = (points || []).filter((p) => {
     if (device !== "all" && p.device_type !== device) return false;
     return p.x != null && p.y != null && p.viewport_width;
   });
 
-  // Decide page height: use max click y, fallback to 2x viewport.
   const maxY = filtered.reduce((m, p) => Math.max(m, p.y || 0), 0);
-  const pageHeight = Math.max(800, maxY + 200);
+  // Mobile pages are typically much taller than desktop, so give more room.
+  const minHeight = isMobile ? 1400 : 800;
+  const pageHeight = Math.max(minHeight, maxY + 200);
 
-  // Build iframe URL — page_url should look like "host/path" (v1.1 tracker).
-  // Legacy data without host (just "/path") gets no iframe.
+  // Build iframe URL — page_url should look like "host" (v1.1.1 tracker).
   const hasHost = currentPage && /^[^\/]+\.[^\/]+/.test(currentPage);
   const iframeUrl = hasHost ? `https://${currentPage}` : null;
 
-  // Detect iframe load failure (X-Frame-Options / CSP frame-ancestors).
-  // onError doesn't fire for these, so we use a timeout — if onLoad hasn't
-  // fired in 4s, assume blocked.
+  // Reload iframe when device toggle changes so media queries re-evaluate
+  // against the new viewport width.
   useEffect(() => {
-    if (!iframeUrl) return;
+    setIframeKey((k) => k + 1);
     setIframeFailed(false);
+    if (!iframeUrl) return;
     const t = setTimeout(() => setIframeFailed(true), 4000);
     return () => clearTimeout(t);
-  }, [iframeUrl]);
+  }, [iframeUrl, device]);
 
   // Draw the heat blooms + click dots on the canvas.
   useEffect(() => {
@@ -115,7 +120,7 @@ function HeatmapWithPreview({ points, topClicks, currentPage, onClear }) {
     if (!canvas || !container) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const width = container.clientWidth;
+    const width = isMobile ? MOBILE_PREVIEW_WIDTH : container.clientWidth;
 
     canvas.width = width * dpr;
     canvas.height = pageHeight * dpr;
@@ -157,7 +162,7 @@ function HeatmapWithPreview({ points, topClicks, currentPage, onClear }) {
       ctx.arc(x, y, 1.5, 0, Math.PI * 2);
       ctx.fill();
     });
-  }, [filtered, pageHeight, currentPage]);
+  }, [filtered, pageHeight, currentPage, isMobile]);
 
   return (
     <>
@@ -167,9 +172,10 @@ function HeatmapWithPreview({ points, topClicks, currentPage, onClear }) {
             <h3 className="card-title" style={{ marginBottom: 4 }}>Click heatmap</h3>
             <div style={{ fontSize: 12, fontFamily: "JetBrains Mono, monospace", color: "var(--accent-soft)" }}>
               {currentPage}
+              {isMobile && <span style={{ marginLeft: 8, opacity: 0.7 }}>· mobile preview (390px)</span>}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             {["all", "desktop", "mobile"].map((d) => (
               <button
                 key={d}
@@ -208,12 +214,19 @@ function HeatmapWithPreview({ points, topClicks, currentPage, onClear }) {
             overflow: "auto",
             border: "1px solid var(--line)",
             borderRadius: "var(--radius)",
-            background: "var(--bg-elev-2)"
+            background: isMobile ? "#1a1a1a" : "var(--bg-elev-2)"
           }}
         >
-          <div style={{ position: "relative", width: "100%", height: pageHeight }}>
+          <div style={{
+            position: "relative",
+            width: isMobile ? MOBILE_PREVIEW_WIDTH + "px" : "100%",
+            height: pageHeight,
+            margin: isMobile ? "0 auto" : 0,
+            boxShadow: isMobile ? "0 0 0 1px var(--line), 0 8px 24px rgba(0,0,0,0.5)" : "none"
+          }}>
             {iframeUrl ? (
               <iframe
+                key={iframeKey}
                 title="Page preview"
                 src={iframeUrl}
                 onLoad={() => setIframeFailed(false)}

@@ -12,7 +12,7 @@ function fromLocalDateInput(str, endOfDay) {
   return d.getTime();
 }
 
-export default function Filters({ filters, setFilters, pages, onRefresh }) {
+export default function Filters({ filters, setFilters, pages, onRefresh, onExport, exporting }) {
   function update(k, v) { setFilters((f) => ({ ...f, [k]: v || undefined })); }
   function preset(days) {
     const to = Date.now();
@@ -41,14 +41,25 @@ export default function Filters({ filters, setFilters, pages, onRefresh }) {
       <div className="filter-group">
         <label className="filter-label">Quick</label>
         <div style={{ display: "flex", gap: 6 }}>
-          <button className="btn btn-ghost" onClick={() => preset(1)}>24h</button>
-          <button className="btn btn-ghost" onClick={() => preset(7)}>7d</button>
-          <button className="btn btn-ghost" onClick={() => preset(30)}>30d</button>
+          <button type="button" className="btn btn-ghost" onClick={() => preset(1)}>24h</button>
+          <button type="button" className="btn btn-ghost" onClick={() => preset(7)}>7d</button>
+          <button type="button" className="btn btn-ghost" onClick={() => preset(30)}>30d</button>
         </div>
       </div>
       <div className="filter-group">
-        <label className="filter-label">&nbsp;</label>
-        <button className="btn" onClick={onRefresh}>Refresh</button>
+        <label className="filter-label">Actions</label>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button type="button" className="btn" onClick={onRefresh}>Refresh</button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={onExport}
+            disabled={exporting}
+            title="Download CSV report for current filter range"
+          >
+            {exporting ? "..." : "Export CSV"}
+          </button>
+        </div>
       </div>
     </div>
   );
